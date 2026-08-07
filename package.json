@@ -1,0 +1,27 @@
+{
+  "name": "globaltix-plan-server-tools",
+  "version": "1.0.0",
+  "description": "Node.js server-friendly tools and chunked dataset generators for GlobalTix ready matched product plans",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "build-data": "node prepare_server_data.js",
+    "import-plans": "node import_plans.js",
+    "test-2-products": "node import_plans.js --limit 2",
+    "queue:build": "node queue_manager.js build",
+    "queue:status": "node queue_manager.js status",
+    "queue:retry": "node queue_manager.js retry",
+    "queue:reset": "node queue_manager.js reset",
+    "queue:clean": "node queue_manager.js clean"
+  },
+  "keywords": [
+    "globaltix",
+    "traviia",
+    "plans",
+    "node",
+    "server-friendly"
+  ],
+  "author": "Traviia Team",
+  "license": "ISC"
+}

@@ -1,0 +1,40 @@
+{
+  "paths": {
+    "sourceMatchedFile": "../globatix_product/globaltix_matched_ready_products.json",
+    "outputMinified": "./data/globaltix_matched_ready_products.min.json",
+    "outputLite": "./data/globaltix_matched_ready_products_lite.json",
+    "outputStats": "./data/stats.json",
+    "chunksDir": "./data/chunks",
+    "progressFile": "./data/import_progress.json",
+    "queueFile": "./data/queue.json",
+    "dbExportFile": "./data/db_ready_plans_export.json",
+    "duplicateExportFile": "./data/duplicate_products_export.json"
+  },
+  "dataset": {
+    "chunkSize": 500
+  },
+  "queue": {
+    "autoEnqueue": true,
+    "maxRetries": 3
+  },
+  "server": {
+    "baseUrl": "https://traviia-backend-167648433424.europe-north1.run.app",
+    "apiKey": "",
+    "prod_write_allow": true,
+    "getLiveOptionsEndpointPattern": "/api/v1/globaltix/product/options/{id}",
+    "variantPlanEndpointPattern": "/api/v1/variant/details/{slug}/variantDetails"
+  },
+  "importer": {
+    "concurrency": 3,
+    "useQueue": true,
+    "importMode": "upsert",
+    "mode": "upsert",
+    "defaultAvailability": false,
+    "deleteDuplicates": false,
+    "deleteOnlyGlobaltix": true,
+    "dryRun": false,
+    "timeoutMs": 60000,
+    "retryAttempts": 3,
+    "retryDelayMs": 1000
+  }
+}

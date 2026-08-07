@@ -1,0 +1,60 @@
+{
+  "total_matched_products": 3033,
+  "total_chunks": 7,
+  "chunk_size": 500,
+  "files": {
+    "minified_json": {
+      "file": "globaltix_matched_ready_products.min.json",
+      "size_mb": 30.49
+    },
+    "lite_json": {
+      "file": "globaltix_matched_ready_products_lite.json",
+      "size_mb": 6.04
+    }
+  },
+  "chunks": [
+    {
+      "chunk": 1,
+      "file": "chunk_001.json",
+      "item_count": 500,
+      "size_mb": 4.87
+    },
+    {
+      "chunk": 2,
+      "file": "chunk_002.json",
+      "item_count": 500,
+      "size_mb": 5.09
+    },
+    {
+      "chunk": 3,
+      "file": "chunk_003.json",
+      "item_count": 500,
+      "size_mb": 4.81
+    },
+    {
+      "chunk": 4,
+      "file": "chunk_004.json",
+      "item_count": 500,
+      "size_mb": 6.3
+    },
+    {
+      "chunk": 5,
+      "file": "chunk_005.json",
+      "item_count": 500,
+      "size_mb": 4.59
+    },
+    {
+      "chunk": 6,
+      "file": "chunk_006.json",
+      "item_count": 500,
+      "size_mb": 4.27
+    },
+    {
+      "chunk": 7,
+      "file": "chunk_007.json",
+      "item_count": 33,
+      "size_mb": 0.57
+    }
+  ],
+  "updated_at": "2026-08-06T08:41:11.690Z"
+}
