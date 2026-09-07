@@ -25,16 +25,18 @@
     "variantPlanEndpointPattern": "/api/v1/variant/details/{slug}/variantDetails"
   },
   "importer": {
-    "concurrency": 3,
+    "concurrency": 2,
     "useQueue": true,
-    "importMode": "upsert",
-    "mode": "upsert",
+    "importMode": "update",
+    "mode": "update",
     "defaultAvailability": false,
     "deleteDuplicates": false,
     "deleteOnlyGlobaltix": true,
     "dryRun": false,
+    "batchDelayMs": 1500,
+    "requestDelayMs": 300,
     "timeoutMs": 60000,
     "retryAttempts": 3,
-    "retryDelayMs": 1000
+    "retryDelayMs": 2000
   }
 }

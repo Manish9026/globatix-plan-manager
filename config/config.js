@@ -65,7 +65,9 @@ export const config = {
         dryRun: rawConfig.importer?.dryRun || false,
         timeoutMs: parseInt(process.env.TIMEOUT_MS || rawConfig.importer?.timeoutMs || 60000, 10),
         retryAttempts: parseInt(process.env.RETRY_ATTEMPTS || rawConfig.importer?.retryAttempts || 3, 10),
-        retryDelayMs: parseInt(process.env.RETRY_DELAY_MS || rawConfig.importer?.retryDelayMs || 1000, 10)
+        retryDelayMs: parseInt(process.env.RETRY_DELAY_MS || rawConfig.importer?.retryDelayMs || 2000, 10),
+        batchDelayMs: parseInt(process.env.BATCH_DELAY_MS || rawConfig.importer?.batchDelayMs || 1500, 10),
+        requestDelayMs: parseInt(process.env.REQUEST_DELAY_MS || rawConfig.importer?.requestDelayMs || 300, 10)
     }
 };
 

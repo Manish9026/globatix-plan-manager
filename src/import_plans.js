@@ -18,6 +18,7 @@ function askConfirmation(promptText) {
         });
     });
 }
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 import {
     loadQueue,
     buildQueue,
@@ -57,6 +58,7 @@ const concurrency = parseInt(getArg('--concurrency', String(config.importer.conc
 const apiKey = getArg('--api-key', config.server.apiKey || '');
 const limit = parseInt(getArg('--limit', '0'), 10);
 const skipConfirm = args.includes('--yes') || args.includes('-y') || config.importer.skipConfirm || false;
+const operationalMode = getArg('--mode', config.importer.mode || 'upsert');
 
 function loadProgress() {
     if (fs.existsSync(PROGRESS_FILE)) {
@@ -299,6 +301,11 @@ async function processProduct(item, progress, headers) {
         const urlTrue = `${baseLiveUrl}${sep}isDynamicPrice=true`;
         console.log(`    [LIVE-GET] Requesting options (isDynamicPrice=true) -> ID ${gtId}`);
         let liveRes = await makeGetRequest(urlTrue, headers);
+        if (liveRes.statusCode === 429) {
+            console.warn(`    [!] Rate limited (HTTP 429) on live options! Pausing 5s before retry...`);
+            await sleep(5000);
+            liveRes = await makeGetRequest(urlTrue, headers);
+        }
         let liveOptionsList = (liveRes.statusCode === 200) ? parseLiveOptions(liveRes.data) : [];
 
         // Fallback attempt: if no options found, try isDynamicPrice=false
@@ -306,6 +313,11 @@ async function processProduct(item, progress, headers) {
             const urlFalse = `${baseLiveUrl}${sep}isDynamicPrice=false`;
             console.log(`    [LIVE-GET] [!] No options found with isDynamicPrice=true. Retrying with isDynamicPrice=false -> ID ${gtId}`);
             liveRes = await makeGetRequest(urlFalse, headers);
+            if (liveRes.statusCode === 429) {
+                console.warn(`    [!] Rate limited (HTTP 429) on live options! Pausing 5s before retry...`);
+                await sleep(5000);
+                liveRes = await makeGetRequest(urlFalse, headers);
+            }
             if (liveRes.statusCode === 200) {
                 liveOptionsList = parseLiveOptions(liveRes.data);
             }
@@ -384,6 +396,7 @@ async function processProduct(item, progress, headers) {
         };
 
         const ticketTypesList = [];
+        const ticketTiers = [];
         let primaryTicket = null;
         let bestPriority = 999;
 
@@ -400,6 +413,16 @@ async function processProduct(item, progress, headers) {
                 sku: ticketSku,
                 name: ticketName,
                 type: ticketType
+            });
+
+            ticketTiers.push({
+                ...ticket,
+                id: ticketId,
+                sku: ticketSku,
+                name: ticketName,
+                nameTranslated: ticket.nameTranslated || ticketName,
+                type: ticketType,
+                currency: ticket.currency || opt.currency || gtData.currency || 'SGD'
             });
 
             const prio = getTicketPriority(ticketType);
@@ -525,6 +548,65 @@ async function processProduct(item, progress, headers) {
         if (recSellingPrice !== null && recSellingPrice !== undefined) cleanListingPrice.recommended_selling_price = Math.ceil(recSellingPrice);
         if (retailPrice !== null && retailPrice !== undefined) cleanListingPrice.retail_price = Math.ceil(retailPrice);
 
+        // Build comprehensive properties capturing all GlobalTix return option response fields
+        const buildPlanProperties = () => {
+            const visitDate = opt.visitDate || (opt.isOpenDated !== undefined ? {
+                isOpenDated: !!opt.isOpenDated,
+                request: !opt.isOpenDated,
+                required: !opt.isOpenDated
+            } : null);
+
+            return {
+                source: 'globaltix',
+                product_id: gtId,
+                prod_no: gtId,
+                option_id: optionId,
+                type: opt.type || 'Ticket',
+                ticketValidity: opt.ticketValidity || (visitDate?.isOpenDated ? 'Duration' : 'FixedDate'),
+                visitDate: visitDate,
+                timeSlot: Array.isArray(opt.timeSlot) && opt.timeSlot.length > 0 ? opt.timeSlot : null,
+                definedDuration: opt.definedDuration || null,
+                advanceBooking: opt.advanceBooking ? {
+                    required: !!opt.advanceBooking.required,
+                    day: opt.advanceBooking.day ?? null,
+                    hour: opt.advanceBooking.hour ?? null,
+                    minute: opt.advanceBooking.minute ?? null,
+                    dayMinute: opt.advanceBooking.dayMinute ?? null
+                } : null,
+                isCancellable: opt.isCancellable ?? false,
+                cancellationPolicy: opt.cancellationPolicy || null,
+                cancellationNotes: Array.isArray(opt.cancellationNotes) ? opt.cancellationNotes.filter(Boolean) : (opt.cancellationNotes ? [opt.cancellationNotes] : []),
+                ticketFormat: opt.ticketFormat || null,
+                questions: Array.isArray(opt.questions) ? opt.questions.map(q => ({
+                    id: q.id,
+                    question: q.question,
+                    type: q.type,
+                    questionCode: q.questionCode || null,
+                    options: q.options || []
+                })) : [],
+                isCapacity: opt.isCapacity ?? false,
+                isDynamicPricing: opt.isDynamicPricing ?? false,
+                demandType: opt.demandType || null,
+                isBypass: opt.isBypass ?? null,
+                hideManageBookingLink: opt.hideManageBookingLink ?? null,
+                primaryTicket: opt.primaryTicket ?? null,
+                sortOrder: opt.sortOrder ?? null,
+                keywords: opt.keywords || null,
+                sourceName: opt.sourceName || gtData.sourceName || null,
+                sourceTitle: opt.sourceTitle || gtData.sourceTitle || null,
+                sourceCurrency: opt.sourceCurrency || opt.currency || gtData.currency || null,
+                currency: opt.currency || gtData.currency || null,
+                publishStart: opt.publishStart || null,
+                publishEnd: opt.publishEnd || null,
+                redeemStart: opt.redeemStart || null,
+                redeemEnd: opt.redeemEnd || null,
+                tourInformation: Array.isArray(opt.tourInformation) && opt.tourInformation.some(Boolean) ? opt.tourInformation.filter(Boolean) : null,
+                ticketTiers: ticketTiers
+            };
+        };
+
+        const planProperties = buildPlanProperties();
+
         // Step 1 Payload: Create Activity Plan (Table: activity_plans) per option
         const planPayload = {
             unique_id: `globaltix-${optionId}`,
@@ -543,7 +625,7 @@ async function processProduct(item, progress, headers) {
             availability: config.importer.defaultAvailability ?? false,
             week_opening_info: weekOpeningInfo,
             listing_price: cleanListingPrice,
-            properties: null,
+            properties: planProperties,
             association: {
                 source: 'globaltix',
                 prod_no: gtId,
@@ -602,14 +684,20 @@ async function processProduct(item, progress, headers) {
             }
 
             // Check if mode is explicitly 'patch_only', 'patch', or 'update'
-            const currentMode = String(config.importer.mode || 'upsert').toLowerCase();
+            const currentMode = String(operationalMode || 'upsert').toLowerCase();
             if (currentMode !== 'patch_only' && currentMode !== 'patch' && currentMode !== 'update') {
                 // Execute live HTTP POST request (Upserts plan, updating slug, unique_id, listing_price, and availability in PostgreSQL)
                 try {
-                    const planRes = await makePostRequest(createPlanEndpoint, headers, planPayload);
+                    let planRes = await makePostRequest(createPlanEndpoint, headers, planPayload);
+                    if (planRes.statusCode === 429) {
+                        console.warn(`    [!] Rate limited (HTTP 429) on POST! Pausing 5s before retry...`);
+                        await sleep(5000);
+                        planRes = await makePostRequest(createPlanEndpoint, headers, planPayload);
+                    }
                     if (planRes.statusCode === 200 && planRes.data && planRes.data.status !== false) {
                         console.log(`    [PROD-WRITE] [+] Plan Upserted (POST): ${planSlug} for Activity (${slug})`);
                         createdCount++;
+                        if (config.importer.requestDelayMs > 0) await sleep(config.importer.requestDelayMs);
                         continue;
                     } else {
                         const errDetail = planRes.data ? JSON.stringify(planRes.data) : (planRes.raw || `HTTP ${planRes.statusCode}`);
@@ -638,13 +726,20 @@ async function processProduct(item, progress, headers) {
                     description: cleanText(opt.description || gtData.description || gtData.summary || opt.name || '') || planName,
                     info: compileInfo() || "",
                     week_opening_info: weekOpeningInfo,
-                    listing_price: cleanListingPrice
+                    listing_price: cleanListingPrice,
+                    properties: planProperties
                 };
                 try {
-                    const patchRes = await makePatchRequest(patchUrl, headers, patchPayload);
+                    let patchRes = await makePatchRequest(patchUrl, headers, patchPayload);
+                    if (patchRes.statusCode === 429) {
+                        console.warn(`    [!] Rate limited (HTTP 429) on PATCH! Pausing 5s before retry...`);
+                        await sleep(5000);
+                        patchRes = await makePatchRequest(patchUrl, headers, patchPayload);
+                    }
                     if (patchRes.statusCode === 200 && patchRes.data && patchRes.data.status !== false) {
-                        console.log(`    [PROD-WRITE] [+] GlobalTix Plan PATCH Updated (ID ${existingMatch.id}): ${planSlug}`);
+                        console.log(`    [PROD-WRITE] [+] GlobalTix Plan Properties & Details PATCH Updated (ID ${existingMatch.id}): ${planSlug}`);
                         createdCount++;
+                        if (config.importer.requestDelayMs > 0) await sleep(config.importer.requestDelayMs);
                         continue;
                     }
                 } catch (pErr) {
@@ -711,6 +806,9 @@ async function runQueueLoop(headers) {
             const chunk = pendingBatch.slice(i, i + concurrency);
             await Promise.all(chunk.map(item => processProduct(item, null, headers)));
             processedTotal += chunk.length;
+            if (config.importer.batchDelayMs > 0) {
+                await sleep(config.importer.batchDelayMs);
+            }
             if (limit > 0 && processedTotal >= limit) break;
         }
     }
@@ -718,7 +816,7 @@ async function runQueueLoop(headers) {
 }
 
 async function main() {
-    const modeStr = String(config.importer.mode || 'upsert').toUpperCase();
+    const modeStr = String(operationalMode || 'upsert').toUpperCase();
     const availStr = config.importer.defaultAvailability ? 'true (Active on Site)' : 'false (Hidden on Site)';
     const dupStr = config.importer.deleteDuplicates ? 'true (ENABLED - Will delete duplicates)' : 'false (DISABLED - Deletions turned off)';
     const prodWriteStr = isProdWriteAllowed ? 'true (ALLOWED - Live Database Write)' : 'false (BLOCKED - Read Only / Dry Run)';
@@ -733,6 +831,8 @@ async function main() {
     console.log(` 🗑️ Delete Duplicates   : ${dupStr}`);
     console.log(` 🛡️ Delete Only Source  : globaltix (Strict Safety Active)`);
     console.log(` ⚡ Parallel Concurrency : ${concurrency}`);
+    console.log(` ⏱️ Batch Delay (ms)   : ${config.importer.batchDelayMs}`);
+    console.log(` ⏳ Request Delay (ms) : ${config.importer.requestDelayMs}`);
     console.log(` 📂 Queue Mode          : ${useQueueMode}`);
     console.log(` 🧪 Dry Run Mode        : ${isDryRun}`);
     console.log(`=======================================================`);
@@ -810,6 +910,9 @@ async function main() {
             }
             if (!isDryRun) {
                 saveProgress(progress);
+            }
+            if (config.importer.batchDelayMs > 0) {
+                await sleep(config.importer.batchDelayMs);
             }
         }
 

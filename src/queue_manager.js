@@ -256,7 +256,7 @@ export function enqueueProduct(productId, traviiaSlug, traviiaProductName) {
 }
 
 // CLI handler
-if (process.argv[1] === __filename) {
+if (process.argv[1] && (process.argv[1] === __filename || process.argv[1].endsWith('queue_manager.js'))) {
     const command = process.argv[2] || 'status';
 
     if (command === 'build') {
